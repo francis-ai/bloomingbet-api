@@ -6,6 +6,8 @@ import {
   login,
   verifyLoginOTP,
   forgotPassword,
+  verifyForgotPasswordOTP,
+  resendForgotPasswordOTP,
   resetPassword,
   changePassword,
   getUserProfile,
@@ -27,6 +29,8 @@ router.post("/verify-login-otp", verifyLoginOTP);
 
 // Password Management
 router.post("/forgot-password", forgotPassword);
+router.post("/verify-forgot-password-otp", verifyForgotPasswordOTP);
+router.post("/resend-forgot-password-otp", resendForgotPasswordOTP);
 router.post("/reset-password", resetPassword);
 router.post("/change-password", protectRoute, changePassword);
 

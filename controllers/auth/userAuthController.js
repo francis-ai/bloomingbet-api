@@ -6,6 +6,7 @@ import crypto from "crypto";
 
 const deviceOTPs = {}; // temporary storage
 
+const pendingUsers = {};  // temp storage (keyed by email)
 // ===================== REGISTER =====================
 export const register = async (req, res) => {
   try {
@@ -21,34 +22,27 @@ export const register = async (req, res) => {
     if (existingEmail)
       return res.status(400).json({ message: "Email already exists." });
 
+    if (pendingUsers[email])
+      return res.status(400).json({ message: "OTP already sent. Please verify." });
+
     const hashed = await bcrypt.hash(password, 10);
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
 
-    // ✅ Use user-provided coupon_code if exists, else null
-    const userCoupon = coupon_code && coupon_code.trim() !== "" ? coupon_code.trim() : null;
-
-    // Create user with optional coupon_code
-    const userId = await User.create({
+    // Store in temp storage
+    pendingUsers[email] = {
       fullname,
       email,
       phone,
-      coupon_code: userCoupon,
       password: hashed,
+      coupon_code: coupon_code?.trim() || null,
+      deviceId,
       otp,
-      is_verified: 0,
-    });
+    };
 
-    // Store the registering device as trusted immediately
-    const knownDevices = [deviceId];
-    await User.updateKnownDevices(userId, JSON.stringify(knownDevices));
-
-    // Send verification email
+    // Send OTP
     await sendEmail(email, "Verify Your Account", `<h3>Your OTP is ${otp}</h3>`);
 
-    res.status(201).json({
-      success: true,
-      message: "User registered successfully. OTP sent to your email.",
-    });
+    res.status(200).json({ success: true, message: "OTP sent to your email." });
   } catch (err) {
     console.error("Register Error:", err);
     res.status(500).json({ message: "Server error." });
@@ -62,14 +56,31 @@ export const verifyOTP = async (req, res) => {
     if (!email || !otp)
       return res.status(400).json({ message: "Email and OTP are required." });
 
-    const user = await User.findByEmail(email);
-    if (!user) return res.status(404).json({ message: "User not found." });
+    const tempUser = pendingUsers[email];
+    if (!tempUser) return res.status(404).json({ message: "No registration found." });
 
-    if (String(user.otp) !== String(otp))
+    if (String(tempUser.otp) !== String(otp))
       return res.status(400).json({ message: "Invalid OTP." });
 
-    await User.verifyByEmail(email);
-    res.json({ success: true, message: "Account verified successfully." });
+    // Create user in main DB
+    const userId = await User.create({
+      fullname: tempUser.fullname,
+      email: tempUser.email,
+      phone: tempUser.phone,
+      password: tempUser.password,
+      coupon_code: tempUser.coupon_code,
+      otp: tempUser.otp,
+      is_verified: 1,
+    });
+
+    // Store known device
+    const knownDevices = [tempUser.deviceId];
+    await User.updateKnownDevices(userId, JSON.stringify(knownDevices));
+
+    // Remove from temp storage
+    delete pendingUsers[email];
+
+    res.json({ success: true, message: "Account verified and created successfully." });
   } catch (err) {
     console.error("Verify OTP Error:", err);
     res.status(500).json({ message: "Server error." });
@@ -82,21 +93,20 @@ export const resendOTP = async (req, res) => {
     const { email } = req.body;
     if (!email) return res.status(400).json({ message: "Email is required." });
 
-    const user = await User.findByEmail(email);
-    if (!user) return res.status(404).json({ message: "User not found." });
+    const tempUser = pendingUsers[email];
+    if (!tempUser) return res.status(404).json({ message: "No registration found." });
 
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
-    await User.updateOTPByEmail(email, otp);
+    tempUser.otp = otp;
 
     await sendEmail(email, "Resend OTP", `<h3>Your new OTP is ${otp}</h3>`);
+
     res.json({ success: true, message: "A new OTP has been sent to your email." });
-    console.log("Email received:", req.body);
   } catch (err) {
     console.error("Resend OTP Error:", err);
     res.status(500).json({ message: "Server error." });
   }
 };
-
 
 // ===================== LOGIN =====================
 export const login = async (req, res) => {
@@ -240,10 +250,13 @@ export const forgotPassword = async (req, res) => {
     const user = await User.findByEmail(email);
     if (!user) return res.status(404).json({ message: "User not found." });
 
-    const otp = Math.floor(100000 + Math.random() * 900000);
+    // Generate OTP
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
     await User.updateOTPByEmail(email, otp);
 
+    // Send OTP email
     await sendEmail(email, "Password Reset OTP", `<h3>Your password reset OTP is ${otp}</h3>`);
+
     res.json({ message: "Password reset OTP sent to email." });
   } catch (err) {
     console.error("Forgot Password Error:", err);
@@ -251,18 +264,56 @@ export const forgotPassword = async (req, res) => {
   }
 };
 
-// ===================== RESET PASSWORD =====================
-export const resetPassword = async (req, res) => {
+// ===================== VERIFY FORGOT PASSWORD OTP =====================
+export const verifyForgotPasswordOTP = async (req, res) => {
   try {
-    const { email, otp, newPassword } = req.body;
-    if (!email || !otp || !newPassword)
-      return res.status(400).json({ message: "All fields are required." });
+    const { email, otp } = req.body;
+    if (!email || !otp) return res.status(400).json({ message: "Email and OTP are required." });
 
     const user = await User.findByEmail(email);
     if (!user) return res.status(404).json({ message: "User not found." });
 
     if (String(user.otp) !== String(otp))
       return res.status(400).json({ message: "Invalid OTP." });
+
+    res.json({ message: "OTP verified successfully." });
+  } catch (err) {
+    console.error("Verify Forgot Password OTP Error:", err);
+    res.status(500).json({ message: "Server error." });
+  }
+};
+
+// ===================== RESEND FORGOT PASSWORD OTP =====================
+export const resendForgotPasswordOTP = async (req, res) => {
+  try {
+    const { email } = req.body;
+    if (!email) return res.status(400).json({ message: "Email is required." });
+
+    const user = await User.findByEmail(email);
+    if (!user) return res.status(404).json({ message: "User not found." });
+
+    // Generate new OTP
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    await User.updateOTPByEmail(email, otp);
+
+    await sendEmail(email, "Resend Password Reset OTP", `<h3>Your new OTP is ${otp}</h3>`);
+
+    res.json({ message: "New OTP sent to your email." });
+  } catch (err) {
+    console.error("Resend Forgot Password OTP Error:", err);
+    res.status(500).json({ message: "Server error." });
+  }
+};
+
+// ===================== RESET PASSWORD =====================
+export const resetPassword = async (req, res) => {
+  try {
+    const { email, newPassword } = req.body;
+    if (!email || !newPassword)
+      return res.status(400).json({ message: "All fields are required." });
+
+    const user = await User.findByEmail(email);
+    if (!user) return res.status(404).json({ message: "User not found." });
 
     const hashed = await bcrypt.hash(newPassword, 10);
     await User.updatePasswordByEmail(email, hashed);
