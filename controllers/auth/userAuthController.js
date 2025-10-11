@@ -5,7 +5,6 @@ import { generateToken } from "../../utils/jwt.js";
 import crypto from "crypto";
 
 const deviceOTPs = {}; // temporary storage
-
 const pendingUsers = {};  // temp storage (keyed by email)
 // ===================== REGISTER =====================
 export const register = async (req, res) => {
