@@ -3,6 +3,8 @@ import { Affiliate } from "../../models/affiliateAuthModel.js";
 import sendEmail from "../../utils/sendEmail.js";
 import { generateToken } from "../../utils/jwt.js";
 
+const pendingAffiliates = {}; // temporary storage (keyed by email)
+
 // ===================== REGISTER =====================
 export const register = async (req, res) => {
   try {
@@ -14,6 +16,7 @@ export const register = async (req, res) => {
     if (!deviceId)
       return res.status(400).json({ message: "Missing device identifier." });
 
+    // Prevent duplicate in DB
     const existingEmail = await Affiliate.findByEmail(email);
     if (existingEmail)
       return res.status(400).json({ message: "Email already exists." });
@@ -22,30 +25,30 @@ export const register = async (req, res) => {
     if (existingPhone)
       return res.status(400).json({ message: "Phone number already exists." });
 
+    // Prevent resending OTP unnecessarily
+    if (pendingAffiliates[email])
+      return res.status(400).json({ message: "OTP already sent. Please verify your email." });
+
     const hashed = await bcrypt.hash(password, 10);
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
 
-    // Create affiliate
-    const affiliateId = await Affiliate.create({
+    // Temporarily store affiliate data in memory
+    pendingAffiliates[email] = {
       firstname,
       lastname,
       email,
       phone,
       password: hashed,
+      deviceId,
       otp,
-      is_verified: 0,
-    });
-
-    // Store first device as trusted
-    const knownDevices = [deviceId];
-    await Affiliate.updateKnownDevices(affiliateId, JSON.stringify(knownDevices));
+    };
 
     // Send OTP email
     await sendEmail(email, "Verify Your Affiliate Account", `<h3>Your OTP is ${otp}</h3>`);
 
-    res.status(201).json({
+    res.status(200).json({
       success: true,
-      message: "Affiliate registered successfully. OTP sent to your email.",
+      message: "OTP sent to your email for verification.",
     });
   } catch (err) {
     console.error("Affiliate Register Error:", err);
@@ -53,16 +56,37 @@ export const register = async (req, res) => {
   }
 };
 
-// ===================== VERIFY OTP =====================
+// ===================== VERIFY AFFILIATE OTP =====================
 export const verifyOTP = async (req, res) => {
   try {
     const { email, otp } = req.body;
 
-    const affiliate = await Affiliate.findByEmail(email);
-    if (!affiliate) return res.status(404).json({ message: "Affiliate not found." });
-    if (affiliate.otp !== otp) return res.status(400).json({ message: "Invalid OTP." });
+    if (!email || !otp)
+      return res.status(400).json({ message: "Email and OTP are required." });
 
-    await Affiliate.verifyByEmail(email);
+    const pending = pendingAffiliates[email];
+    if (!pending)
+      return res.status(404).json({ message: "No pending registration found for this email." });
+
+    if (String(pending.otp) !== String(otp))
+      return res.status(400).json({ message: "Invalid OTP." });
+
+    // ✅ Save verified affiliate to DB
+    const affiliateId = await Affiliate.create({
+      firstname: pending.firstname,
+      lastname: pending.lastname,
+      email: pending.email,
+      phone: pending.phone,
+      password: pending.password,
+      is_verified: 1,
+    });
+
+    // Store known device
+    await Affiliate.updateKnownDevices(affiliateId, JSON.stringify([pending.deviceId]));
+
+    // Remove from temporary storage
+    delete pendingAffiliates[email];
+
     res.status(200).json({ success: true, message: "Account verified successfully." });
   } catch (err) {
     console.error("Verify OTP Error:", err);
@@ -70,24 +94,32 @@ export const verifyOTP = async (req, res) => {
   }
 };
 
-// ===================== RESEND OTP =====================
+// ===================== RESEND AFFILIATE OTP =====================
 export const resendOTP = async (req, res) => {
   try {
     const { email } = req.body;
+    if (!email)
+      return res.status(400).json({ message: "Email is required." });
 
-    const affiliate = await Affiliate.findByEmail(email);
-    if (!affiliate) return res.status(404).json({ message: "Affiliate not found." });
+    const pending = pendingAffiliates[email];
+    if (!pending)
+      return res.status(404).json({ message: "No pending registration found. Please register again." });
 
-    const otp = Math.floor(100000 + Math.random() * 900000).toString();
-    await Affiliate.updateOTPByEmail(email, otp);
+    // Generate new OTP
+    const newOtp = Math.floor(100000 + Math.random() * 900000).toString();
+    pending.otp = newOtp; // update OTP in memory
 
-    await sendEmail(email, "Your New OTP", `<h3>Your OTP is ${otp}</h3>`);
-    res.status(200).json({ success: true, message: "OTP resent successfully." });
+    // Send OTP email
+    await sendEmail(email, "Your New OTP", `<h3>Your new OTP is ${newOtp}</h3>`);
+
+    res.status(200).json({ success: true, message: "A new OTP has been sent to your email." });
   } catch (err) {
     console.error("Resend OTP Error:", err);
     res.status(500).json({ message: "Server error." });
   }
 };
+
+
 
 
 // ===================== LOGIN =====================

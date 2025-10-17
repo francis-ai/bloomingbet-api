@@ -55,6 +55,7 @@ app.get("/", (req, res) => {
   res.send("🚀 Auth Backend is running with CORS & Cookies configured!");
 });
 
+
 // =================== LOGOUT ===================
 app.post("/api/logout", (req, res) => {
   res.clearCookie("connect.sid", {

@@ -21,12 +21,21 @@ export const Affiliate = {
   },
 
   // ===================== CREATE =====================
-  async create({ firstname, lastname, email, phone, password, otp, is_verified = 0 }) {
+  async create(data) {
     const [result] = await db.query(
       `INSERT INTO tbl_affiliates 
-      (firstname, lastname, email, phone, password, otp, is_verified, known_devices, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())`,
-      [firstname, lastname, email, phone, password, otp.toString(), is_verified, JSON.stringify([])]
+        (firstname, lastname, email, phone, password, otp, is_verified, known_devices, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())`,
+      [
+        String(data.firstname || ""),
+        String(data.lastname || ""),
+        String(data.email || ""),
+        String(data.phone || ""),
+        String(data.password || ""),
+        String(data.otp || ""),
+        Number(data.is_verified || 0),
+        JSON.stringify(data.known_devices || []),
+      ]
     );
     return result.insertId;
   },
