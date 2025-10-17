@@ -4,7 +4,7 @@ import sendEmail from "../../utils/sendEmail.js";
 import { generateToken } from "../../utils/jwt.js";
 import crypto from "crypto";
 
-const deviceOTPs = {}; // temporary storage
+const deviceOTPs = {}; // temporary storage 
 const pendingUsers = {};  // temp storage (keyed by email)
 // ===================== REGISTER =====================
 export const register = async (req, res) => {
@@ -200,20 +200,33 @@ export const login = async (req, res) => {
 // ===================== VERIFY LOGIN OTP (new device) =====================
 export const verifyLoginOTP = async (req, res) => {
   try {
-    const { email, otp, deviceId } = req.body;
-    if (!email || !otp || !deviceId)
-      return res.status(400).json({ message: "Email, OTP, and deviceId are required." });
+    const { email, phone, otp, deviceId } = req.body;
 
-    const stored = deviceOTPs[email];
+    if ((!email && !phone) || !otp || !deviceId)
+      return res
+        .status(400)
+        .json({ message: "Email or phone, OTP, and deviceId are required." });
+
+    // Find the user first (so we can get their email if only phone is provided)
+    const user = email
+      ? await User.findByEmail(email)
+      : await User.findByPhone(phone);
+
+    if (!user)
+      return res.status(404).json({ message: "User not found." });
+
+    // Use the user's email as the key for stored OTPs
+    const stored = deviceOTPs[user.email];
+
     if (!stored || stored.otp !== otp || Date.now() > stored.expires)
       return res.status(400).json({ message: "Invalid or expired OTP." });
 
-    const user = await User.findByEmail(email);
     const knownDevices = JSON.parse(user.known_devices || "[]");
     if (!knownDevices.includes(deviceId)) knownDevices.push(deviceId);
 
     await User.updateKnownDevices(user.id, JSON.stringify(knownDevices));
-    delete deviceOTPs[email];
+
+    delete deviceOTPs[user.email];
 
     const token = generateToken(user);
     res.cookie("token", token, {
