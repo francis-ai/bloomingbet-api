@@ -107,6 +107,7 @@ export const resendOTP = async (req, res) => {
   }
 };
 
+
 // ===================== LOGIN =====================
 export const login = async (req, res) => {
   try {
@@ -387,3 +388,4 @@ export const getUserProfile = async (req, res) => {
     res.status(500).json({ message: "Server error." });
   }
 };
+

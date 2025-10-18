@@ -123,7 +123,6 @@ export const resendOTP = async (req, res) => {
   }
 };
 
-
 // ===================== LOGIN =====================
 export const login = async (req, res) => {
   try {
@@ -246,16 +245,77 @@ export const verifyLoginOTP = async (req, res) => {
 export const forgotPassword = async (req, res) => {
   try {
     const { email } = req.body;
-    const affiliate = await Affiliate.findByEmail(email);
-    if (!affiliate) return res.status(404).json({ message: "Affiliate not found." });
+    if (!email) return res.status(400).json({ message: "Email is required." });
 
+    const affiliate = await Affiliate.findByEmail(email);
+    if (!affiliate)
+      return res.status(404).json({ message: "Affiliate not found." });
+
+    // Generate OTP
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
     await Affiliate.updateOTPByEmail(email, otp);
-    await sendEmail(email, "Reset Password OTP", `<h3>Your OTP is ${otp}</h3>`);
 
-    res.status(200).json({ success: true, message: "OTP sent for password reset." });
+    // Send OTP to email
+    await sendEmail(
+      email,
+      "Password Reset OTP",
+      `<h3>Your password reset OTP is <strong>${otp}</strong></h3>`
+    );
+
+    res.json({ success: true, message: "Password reset OTP sent to email." });
   } catch (err) {
     console.error("Forgot Password Error:", err);
+    res.status(500).json({ message: "Server error." });
+  }
+};
+
+// ===================== VERIFY FORGOT PASSWORD OTP =====================
+export const verifyForgotPasswordOTP = async (req, res) => {
+  try {
+    const { email, otp } = req.body;
+    if (!email || !otp)
+      return res
+        .status(400)
+        .json({ message: "Email and OTP are required." });
+
+    const affiliate = await Affiliate.findByEmail(email);
+    if (!affiliate)
+      return res.status(404).json({ message: "Affiliate not found." });
+
+    if (String(affiliate.otp) !== String(otp))
+      return res.status(400).json({ message: "Invalid OTP." });
+
+    res.json({ success: true, message: "OTP verified successfully." });
+  } catch (err) {
+    console.error("Verify OTP Error:", err);
+    res.status(500).json({ message: "Server error." });
+  }
+};
+
+// ===================== RESEND FORGOT PASSWORD OTP =====================
+export const resendForgotPasswordOTP = async (req, res) => {
+  try {
+    const { email } = req.body;
+    if (!email) return res.status(400).json({ message: "Email is required." });
+
+    const affiliate = await Affiliate.findByEmail(email);
+    if (!affiliate)
+      return res.status(404).json({ message: "Affiliate not found." });
+
+    // Generate new OTP
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    await Affiliate.updateOTPByEmail(email, otp);
+
+    // Send new OTP
+    await sendEmail(
+      email,
+      "Resend Password Reset OTP",
+      `<h3>Your new OTP is <strong>${otp}</strong></h3>`
+    );
+
+    res.json({ success: true, message: "New OTP sent to your email." });
+  } catch (err) {
+    console.error("Resend OTP Error:", err);
     res.status(500).json({ message: "Server error." });
   }
 };
@@ -264,15 +324,22 @@ export const forgotPassword = async (req, res) => {
 export const resetPassword = async (req, res) => {
   try {
     const { email, otp, newPassword } = req.body;
+    if (!email || !otp || !newPassword)
+      return res
+        .status(400)
+        .json({ message: "Email, OTP, and new password are required." });
 
     const affiliate = await Affiliate.findByEmail(email);
-    if (!affiliate) return res.status(404).json({ message: "Affiliate not found." });
-    if (affiliate.otp !== otp) return res.status(400).json({ message: "Invalid OTP." });
+    if (!affiliate)
+      return res.status(404).json({ message: "Affiliate not found." });
+
+    if (String(affiliate.otp) !== String(otp))
+      return res.status(400).json({ message: "Invalid OTP." });
 
     const hashed = await bcrypt.hash(newPassword, 10);
     await Affiliate.updatePasswordByEmail(email, hashed);
 
-    res.status(200).json({ success: true, message: "Password reset successful." });
+    res.json({ success: true, message: "Password reset successful." });
   } catch (err) {
     console.error("Reset Password Error:", err);
     res.status(500).json({ message: "Server error." });
@@ -282,19 +349,26 @@ export const resetPassword = async (req, res) => {
 // ===================== CHANGE PASSWORD =====================
 export const changePassword = async (req, res) => {
   try {
-    const affiliateId = req.user.id;
+    const affiliateId = req.user.id; // Authenticated affiliate ID
     const { oldPassword, newPassword } = req.body;
 
+    if (!oldPassword || !newPassword)
+      return res
+        .status(400)
+        .json({ message: "Both old and new passwords are required." });
+
     const affiliate = await Affiliate.findById(affiliateId);
-    if (!affiliate) return res.status(404).json({ message: "Affiliate not found." });
+    if (!affiliate)
+      return res.status(404).json({ message: "Affiliate not found." });
 
     const isMatch = await bcrypt.compare(oldPassword, affiliate.password);
-    if (!isMatch) return res.status(400).json({ message: "Old password is incorrect." });
+    if (!isMatch)
+      return res.status(400).json({ message: "Old password is incorrect." });
 
     const hashed = await bcrypt.hash(newPassword, 10);
     await Affiliate.updatePasswordByEmail(affiliate.email, hashed);
 
-    res.status(200).json({ success: true, message: "Password changed successfully." });
+    res.json({ success: true, message: "Password changed successfully." });
   } catch (err) {
     console.error("Change Password Error:", err);
     res.status(500).json({ message: "Server error." });
