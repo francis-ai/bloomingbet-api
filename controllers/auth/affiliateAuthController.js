@@ -3,8 +3,8 @@ import { Affiliate } from "../../models/affiliateAuthModel.js";
 import sendEmail from "../../utils/sendEmail.js";
 import { generateToken } from "../../utils/jwt.js";
 
-const pendingAffiliates = {}; // temporary storage (keyed by email)
 
+const pendingAffiliates = {}; // temporary storage (keyed by email)
 // ===================== REGISTER =====================
 export const register = async (req, res) => {
   try {
@@ -43,6 +43,11 @@ export const register = async (req, res) => {
       otp,
     };
 
+    // Automatically clear entry after 5 minutes
+    setTimeout(() => {
+      delete pendingAffiliates[email];
+    }, 1 * 60 * 1000);
+
     // Send OTP email
     await sendEmail(email, "Verify Your Affiliate Account", `<h3>Your OTP is ${otp}</h3>`);
 
@@ -66,7 +71,7 @@ export const verifyOTP = async (req, res) => {
 
     const pending = pendingAffiliates[email];
     if (!pending)
-      return res.status(404).json({ message: "No pending registration found for this email." });
+      return res.status(404).json({ message: "No pending registration found for this email or OTP expired." });
 
     if (String(pending.otp) !== String(otp))
       return res.status(400).json({ message: "Invalid OTP." });
@@ -78,11 +83,10 @@ export const verifyOTP = async (req, res) => {
       email: pending.email,
       phone: pending.phone,
       password: pending.password,
+      otp: pending.otp,
       is_verified: 1,
+      known_devices: JSON.stringify([pending.deviceId]),
     });
-
-    // Store known device
-    await Affiliate.updateKnownDevices(affiliateId, JSON.stringify([pending.deviceId]));
 
     // Remove from temporary storage
     delete pendingAffiliates[email];
@@ -107,9 +111,9 @@ export const resendOTP = async (req, res) => {
 
     // Generate new OTP
     const newOtp = Math.floor(100000 + Math.random() * 900000).toString();
-    pending.otp = newOtp; // update OTP in memory
+    pending.otp = newOtp;
 
-    // Send OTP email
+    // Send new OTP email
     await sendEmail(email, "Your New OTP", `<h3>Your new OTP is ${newOtp}</h3>`);
 
     res.status(200).json({ success: true, message: "A new OTP has been sent to your email." });
@@ -118,8 +122,6 @@ export const resendOTP = async (req, res) => {
     res.status(500).json({ message: "Server error." });
   }
 };
-
-
 
 
 // ===================== LOGIN =====================
