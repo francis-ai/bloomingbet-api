@@ -8,6 +8,8 @@ import session from "express-session";
 import userAuthRoutes from "./routes/auth/userAuthRoute.js";
 import affiliateAuthRoutes from "./routes/auth/affiliateAuthRoute.js";
 
+import affiliateWithdrawal from "./routes/affiliate/withdrawalRoute.js";
+
 dotenv.config();
 const app = express();
 
@@ -49,6 +51,7 @@ app.use(
 // =================== ROUTES ===================
 app.use("/api/auth/user", userAuthRoutes);
 app.use("/api/auth/affiliates", affiliateAuthRoutes);
+app.use("/api/affiliate/withdrawal", affiliateWithdrawal);
 
 // =================== HEALTH CHECK ===================
 app.get("/", (req, res) => {
