@@ -1,8 +1,8 @@
 import bcrypt from "bcryptjs";
+import crypto from "crypto";
 import { Affiliate } from "../../models/affiliateAuthModel.js";
 import sendEmail from "../../utils/sendEmail.js";
 import { generateToken } from "../../utils/jwt.js";
-
 
 const pendingAffiliates = {}; // temporary storage (keyed by email)
 // ===================== REGISTER =====================
@@ -32,6 +32,13 @@ export const register = async (req, res) => {
     const hashed = await bcrypt.hash(password, 10);
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
 
+    // ✅ Generate affiliate codes
+    const baseCode = firstname?.substring(0, 4)?.toUpperCase() || "AFF";
+    const randomPart = crypto.randomInt(1000, 9999);
+    const affiliate_code = `${baseCode}${randomPart}`;
+    const referral_link = `https://bloomingbet.com/ref/${affiliate_code}`;
+    const coupon_code = `BB${randomPart}`;
+
     // Temporarily store affiliate data in memory
     pendingAffiliates[email] = {
       firstname,
@@ -39,14 +46,17 @@ export const register = async (req, res) => {
       email,
       phone,
       password: hashed,
-      deviceId,
       otp,
+      known_devices: [deviceId],
+      affiliate_code,
+      referral_link,
+      coupon_code,
     };
 
     // Automatically clear entry after 5 minutes
     setTimeout(() => {
       delete pendingAffiliates[email];
-    }, 1 * 60 * 1000);
+    }, 5 * 60 * 1000);
 
     // Send OTP email
     await sendEmail(email, "Verify Your Affiliate Account", `<h3>Your OTP is ${otp}</h3>`);
@@ -76,27 +86,35 @@ export const verifyOTP = async (req, res) => {
     if (String(pending.otp) !== String(otp))
       return res.status(400).json({ message: "Invalid OTP." });
 
-    // ✅ Save verified affiliate to DB
+    // ✅ Save verified affiliate to DB with all details
     const affiliateId = await Affiliate.create({
       firstname: pending.firstname,
       lastname: pending.lastname,
       email: pending.email,
       phone: pending.phone,
       password: pending.password,
-      otp: pending.otp,
+      otp: null, // no need to store OTP anymore
       is_verified: 1,
-      known_devices: JSON.stringify([pending.deviceId]),
+      known_devices: pending.known_devices || [],
+      affiliate_code: pending.affiliate_code,
+      referral_link: pending.referral_link,
+      coupon_code: pending.coupon_code,
     });
 
-    // Remove from temporary storage
+    // Remove from temporary memory
     delete pendingAffiliates[email];
 
-    res.status(200).json({ success: true, message: "Account verified successfully." });
+    res.status(200).json({
+      success: true,
+      message: "Account verified successfully.",
+      affiliateId,
+    });
   } catch (err) {
     console.error("Verify OTP Error:", err);
     res.status(500).json({ message: "Server error." });
   }
 };
+
 
 // ===================== RESEND AFFILIATE OTP =====================
 export const resendOTP = async (req, res) => {

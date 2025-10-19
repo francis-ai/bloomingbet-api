@@ -24,8 +24,9 @@ export const Affiliate = {
   async create(data) {
     const [result] = await db.query(
       `INSERT INTO tbl_affiliates 
-        (firstname, lastname, email, phone, password, otp, is_verified, known_devices, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())`,
+        (firstname, lastname, email, phone, password, otp, is_verified, known_devices, 
+        affiliate_code, referral_link, coupon_code, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())`,
       [
         String(data.firstname || ""),
         String(data.lastname || ""),
@@ -35,8 +36,12 @@ export const Affiliate = {
         String(data.otp || ""),
         Number(data.is_verified || 0),
         JSON.stringify(data.known_devices || []),
+        String(data.affiliate_code || ""),
+        String(data.referral_link || ""),
+        String(data.coupon_code || ""),
       ]
     );
+
     return result.insertId;
   },
 
@@ -76,4 +81,27 @@ export const Affiliate = {
       affiliateId,
     ]);
   },
+
+  //==================== Update Profile ========================
+  async updateProfile(id, firstname, lastname, phone) {
+    const [result] = await db.query(
+      `UPDATE tbl_affiliates 
+      SET firstname = ?, lastname = ?, phone = ?, updated_at = NOW() 
+      WHERE id = ?`,
+      [firstname, lastname, phone, id]
+    );
+    return result.affectedRows > 0;
+  },
+
+  // ===================== GET REFERRAL LINK =====================
+  async getReferralLink(id) {
+    const [rows] = await db.query(
+      `SELECT referral_link, affiliate_code, coupon_code 
+      FROM tbl_affiliates 
+      WHERE id = ?`,
+      [id]
+    );
+    return rows[0] || null; 
+  },
+
 };
