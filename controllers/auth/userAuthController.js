@@ -24,21 +24,30 @@ export const register = async (req, res) => {
     if (pendingUsers[email])
       return res.status(400).json({ message: "OTP already sent. Please verify." });
 
+    // ✅ Validate affiliate coupon_code (if provided)
+    let validAffiliate = null;
+    if (coupon_code) {
+      validAffiliate = await User.findByAffiliateCode(coupon_code.trim());
+      if (!validAffiliate) {
+        return res.status(400).json({ message: "Invalid coupon code." });
+      }
+    }
+
     const hashed = await bcrypt.hash(password, 10);
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
 
-    // Store in temp storage
+    // Store in temp memory
     pendingUsers[email] = {
       fullname,
       email,
       phone,
       password: hashed,
-      coupon_code: coupon_code?.trim() || null,
+      coupon_code: validAffiliate ? validAffiliate.affiliate_code : null,
       deviceId,
       otp,
     };
 
-    // Send OTP
+    // Send OTP email
     await sendEmail(email, "Verify Your Account", `<h3>Your OTP is ${otp}</h3>`);
 
     res.status(200).json({ success: true, message: "OTP sent to your email." });
@@ -85,6 +94,7 @@ export const verifyOTP = async (req, res) => {
     res.status(500).json({ message: "Server error." });
   }
 };
+
 
 // ===================== RESEND OTP =====================
 export const resendOTP = async (req, res) => {

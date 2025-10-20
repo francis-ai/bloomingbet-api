@@ -1,4 +1,5 @@
 import { Affiliate } from "../../models/affiliateAuthModel.js";
+import { Referral }  from "../../models/affiliate/referral.js";
 
 // ===================== UPDATE PROFILE =====================
 export const updateAffiliateProfile = async (req, res) => {
@@ -44,6 +45,25 @@ export const getReferralLink = async (req, res) => {
     });
   } catch (err) {
     console.error("Get Referral Link Error:", err);
+    res.status(500).json({ message: "Server error." });
+  }
+};
+
+
+// ===================== GET REFERRED USERS =====================
+export const getReferredUsers = async (req, res) => {
+  try {
+    const affiliateId = req.user.id; // assuming authentication middleware sets this
+
+    const referredUsers = await Referral.getReferredUsers(affiliateId);
+
+    res.status(200).json({
+      success: true,
+      count: referredUsers.length,
+      data: referredUsers,
+    });
+  } catch (err) {
+    console.error("Get Referred Users Error:", err);
     res.status(500).json({ message: "Server error." });
   }
 };

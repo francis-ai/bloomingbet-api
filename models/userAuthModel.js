@@ -19,6 +19,14 @@ export const User = {
     return rows[0];
   },
 
+  async findByAffiliateCode(code) {
+    const [rows] = await db.query(
+      `SELECT id, affiliate_code FROM tbl_affiliates WHERE affiliate_code = ?`,
+      [code]
+    );
+    return rows[0] || null;
+  },
+
   // ===================== CREATE =====================
   async create({ fullname, email, phone, password, otp, coupon_code = null, is_verified = 0 }) {
     const [result] = await db.query(
