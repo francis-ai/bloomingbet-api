@@ -6,11 +6,12 @@ export const updateAffiliateProfile = async (req, res) => {
   try {
     const affiliateId = req.user.id;
     const { firstname, lastname, phone } = req.body;
+    const profile_img = req.file ? req.file.filename : null;
 
     if (!firstname || !lastname || !phone)
       return res.status(400).json({ message: "All fields are required." });
 
-    const updated = await Affiliate.updateProfile(affiliateId, firstname, lastname, phone);
+    const updated = await Affiliate.updateProfile(affiliateId, firstname, lastname, phone, profile_img);
 
     if (!updated)
       return res.status(404).json({ message: "Affiliate not found or not updated." });

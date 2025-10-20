@@ -83,13 +83,22 @@ export const Affiliate = {
   },
 
   //==================== Update Profile ========================
-  async updateProfile(id, firstname, lastname, phone) {
-    const [result] = await db.query(
-      `UPDATE tbl_affiliates 
-      SET firstname = ?, lastname = ?, phone = ?, updated_at = NOW() 
-      WHERE id = ?`,
-      [firstname, lastname, phone, id]
-    );
+  async updateProfile(id, firstname, lastname, phone, profile_img = null) {
+    let query = `
+      UPDATE tbl_affiliates 
+      SET firstname = ?, lastname = ?, phone = ?, updated_at = NOW()`;
+    const params = [firstname, lastname, phone];
+
+    // Only update image if provided
+    if (profile_img) {
+      query += `, profile_img = ?`;
+      params.push(profile_img);
+    }
+
+    query += ` WHERE id = ?`;
+    params.push(id);
+
+    const [result] = await db.query(query, params);
     return result.affectedRows > 0;
   },
 

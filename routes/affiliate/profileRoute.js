@@ -1,5 +1,6 @@
 import express from 'express';
 import { protectRoute } from '../../middleware/authMiddleware.js';
+import uploadAffiliateImage from "../../middleware/uploadAffiliateImage.js";
 import {
    updateAffiliateProfile,
    getReferralLink,
@@ -8,7 +9,7 @@ import {
 
 const router = express.Router();
 
-router.put("/update-profile", protectRoute, updateAffiliateProfile);
+router.put("/update-profile", protectRoute, uploadAffiliateImage.single("profile_img"), updateAffiliateProfile);
 router.get("/referral-link", protectRoute, getReferralLink);
 
 router.get('/referred-users', protectRoute, getReferredUsers);

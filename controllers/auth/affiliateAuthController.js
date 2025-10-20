@@ -224,6 +224,7 @@ export const login = async (req, res) => {
         lastname: affiliate.lastname,
         email: affiliate.email,
         phone: affiliate.phone,
+        profile_img: affiliate.profile_img,
       },
     });
   } catch (err) {

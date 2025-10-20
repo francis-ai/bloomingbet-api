@@ -20,6 +20,9 @@ app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
 app.use(morgan("dev"));
 
+// =================== IMAGE UPLOAD ================
+app.use("/uploads", express.static("uploads"));
+
 // =================== CORS ===================
 app.use(
   cors({
