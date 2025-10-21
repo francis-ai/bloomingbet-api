@@ -200,6 +200,7 @@ export const login = async (req, res) => {
         fullname: user.fullname,
         email: user.email,
         phone: user.phone,
+        avaliable_bal: user.avaliable_bal
       },
     });
   } catch (err) {
@@ -377,8 +378,8 @@ export const changePassword = async (req, res) => {
 // ===================== USER PROFILE =====================
 export const getUserProfile = async (req, res) => {
   try {
-    const userId = req.user.id;
-    const user = await User.findById(userId);
+    const userId = req.user.id; // assuming you have auth middleware
+    const user = await User.getById(userId);
 
     if (!user)
       return res.status(404).json({ message: "User not found." });
@@ -386,16 +387,10 @@ export const getUserProfile = async (req, res) => {
     res.status(200).json({
       success: true,
       message: "User profile fetched successfully.",
-      user: {
-        id: user.id,
-        fullname: user.fullname,
-        email: user.email,
-        phone: user.phone,
-      },
+      user,
     });
   } catch (err) {
     console.error("Get Profile Error:", err);
     res.status(500).json({ message: "Server error." });
   }
 };
-

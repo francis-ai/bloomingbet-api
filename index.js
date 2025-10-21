@@ -7,7 +7,7 @@ import session from "express-session";
 
 import userAuthRoutes from "./routes/auth/userAuthRoute.js";
 import affiliateAuthRoutes from "./routes/auth/affiliateAuthRoute.js";
-
+import userDeposit from "./routes/user/depositRoute.js";
 import affiliateWithdrawal from "./routes/affiliate/withdrawalRoute.js";
 import affiliateProfile from "./routes/affiliate/profileRoute.js";
 
@@ -57,6 +57,7 @@ app.use("/api/auth/user", userAuthRoutes);
 app.use("/api/auth/affiliates", affiliateAuthRoutes);
 app.use("/api/affiliate/withdrawal", affiliateWithdrawal);
 app.use("/api/affiliate/profile", affiliateProfile);
+app.use("/api/user/deposit", userDeposit);
 
 // =================== HEALTH CHECK ===================
 app.get("/", (req, res) => {

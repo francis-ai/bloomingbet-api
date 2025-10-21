@@ -74,4 +74,10 @@ export const User = {
       userId,
     ]);
   },
+
+  // Get user by ID
+  async getById(userId) {
+    const [rows] = await db.query("SELECT * FROM tbl_users WHERE id = ?", [userId]);
+    return rows.length > 0 ? rows[0] : null;
+  }
 };
