@@ -50,7 +50,6 @@ export const getReferralLink = async (req, res) => {
   }
 };
 
-
 // ===================== GET REFERRED USERS =====================
 export const getReferredUsers = async (req, res) => {
   try {
@@ -66,6 +65,38 @@ export const getReferredUsers = async (req, res) => {
   } catch (err) {
     console.error("Get Referred Users Error:", err);
     res.status(500).json({ message: "Server error." });
+  }
+};
+
+export const getDashboardStats = async (req, res) => {
+  try {
+    const affiliateId = req.user.id; // ✅ from token/session
+    const dashboardData = await Referral.getDashboardStats(affiliateId);
+    res.json({ success: true, data: dashboardData });
+  } catch (error) {
+    console.error("Dashboard Error:", error);
+    res.status(500).json({ success: false, message: "Error fetching dashboard data" });
+  }
+};
+
+export const handleReferralVisit = async (req, res) => {
+  try {
+    const { referralCode } = req.params; // e.g., "FRAN4112"
+    const ip = req.ip || req.headers['x-forwarded-for'] || req.connection.remoteAddress;
+    const userAgent = req.headers['user-agent'];
+
+    const affiliateId = await Referral.trackReferralClick(referralCode, ip, userAgent);
+
+    if (!affiliateId) {
+      return res.status(404).send("Invalid referral link");
+    }
+
+    // ✅ Redirect to your main signup page or home
+    return res.redirect(`http://localhost:3000/ref=${referralCode}`);
+    // return res.redirect(`https://bloomingbet.com/register?ref=${referralCode}`);
+  } catch (error) {
+    console.error("Referral link visit error:", error);
+    return res.status(500).send("Something went wrong");
   }
 };
 

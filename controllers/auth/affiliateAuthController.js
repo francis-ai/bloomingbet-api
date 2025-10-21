@@ -36,7 +36,7 @@ export const register = async (req, res) => {
     const baseCode = firstname?.substring(0, 4)?.toUpperCase() || "AFF";
     const randomPart = crypto.randomInt(1000, 9999);
     const affiliate_code = `${baseCode}${randomPart}`;
-    const referral_link = `https://bloomingbet.com/ref/${affiliate_code}`;
+    const referral_link = `${process.env.FRONTEND_URL}/ref/${affiliate_code}`;
     const coupon_code = `BB${randomPart}`;
 
     // Temporarily store affiliate data in memory

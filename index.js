@@ -10,6 +10,7 @@ import affiliateAuthRoutes from "./routes/auth/affiliateAuthRoute.js";
 import userDeposit from "./routes/user/depositRoute.js";
 import affiliateWithdrawal from "./routes/affiliate/withdrawalRoute.js";
 import affiliateProfile from "./routes/affiliate/profileRoute.js";
+import userProfile from "./routes/user/profileRoute.js"
 
 dotenv.config();
 const app = express();
@@ -58,6 +59,7 @@ app.use("/api/auth/affiliates", affiliateAuthRoutes);
 app.use("/api/affiliate/withdrawal", affiliateWithdrawal);
 app.use("/api/affiliate/profile", affiliateProfile);
 app.use("/api/user/deposit", userDeposit);
+app.use("/api/user/referral-redirect", userProfile)
 
 // =================== HEALTH CHECK ===================
 app.get("/", (req, res) => {
