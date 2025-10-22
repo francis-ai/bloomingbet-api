@@ -39,29 +39,90 @@ class Deposit {
   }
 
   // ✅ Safely update user balance (only if not credited yet)
-  static async creditUserOnce(user_id, reference, amount) {
-    const [rows] = await db.query(
-      `SELECT credited FROM tbl_deposit WHERE reference = ?`,
-      [reference]
-    );
+  static async processDepositWithCommission(user_id, reference, amount) {
+    const conn = await db.getConnection();
+    try {
+      await conn.query("START TRANSACTION");
 
-    // If already credited, stop here
-    if (rows.length && rows[0].credited === 1) return;
+      // 1️⃣ Lock the deposit row for update (or create it if doesn't exist)
+      let depositId;
+      const [depositRows] = await conn.query(
+        `SELECT id, credited FROM tbl_deposit WHERE reference = ? FOR UPDATE`,
+        [reference]
+      );
 
-    // Mark as credited and add to balance atomically
-    await db.query("START TRANSACTION");
+      if (depositRows.length) {
+        depositId = depositRows[0].id;
+        if (depositRows[0].credited === 1) {
+          await conn.query("ROLLBACK");
+          return { alreadyProcessed: true }; // ✅ stop double credit
+        }
+      } else {
+        const [insertResult] = await conn.query(
+          `INSERT INTO tbl_deposit (user_id, amount, reference, status, credited)
+          VALUES (?, ?, ?, "success", 0)`,
+          [user_id, amount, reference]
+        );
+        depositId = insertResult.insertId;
+      }
 
-    await db.query(
-      `UPDATE tbl_users SET available_bal = available_bal + ? WHERE id = ?`,
-      [amount, user_id]
-    );
+      // 2️⃣ Credit user balance safely
+      await conn.query(
+        `UPDATE tbl_users SET available_bal = available_bal + ? WHERE id = ?`,
+        [amount, user_id]
+      );
 
-    await db.query(
-      `UPDATE tbl_deposit SET credited = 1 WHERE reference = ?`,
-      [reference]
-    );
+      // 3️⃣ Mark deposit as credited
+      await conn.query(
+        `UPDATE tbl_deposit SET credited = 1 WHERE id = ?`,
+        [depositId]
+      );
 
-    await db.query("COMMIT");
+      // 4️⃣ Handle affiliate commission only if first_deposit = 0
+      const [userRows] = await conn.query(
+        `SELECT coupon_code, first_deposit FROM tbl_users WHERE id = ? FOR UPDATE`,
+        [user_id]
+      );
+
+      const userCoupon = userRows[0]?.coupon_code;
+      const firstDepositFlag = userRows[0]?.first_deposit;
+
+      if (userCoupon && firstDepositFlag === 0) {
+        const [affiliateRows] = await conn.query(
+          `SELECT id, total_earned FROM tbl_affiliates WHERE affiliate_code = ?`,
+          [userCoupon]
+        );
+
+        if (affiliateRows.length) {
+          const affiliate = affiliateRows[0];
+          const commission = amount * 0.15;
+
+          await conn.query(
+            `UPDATE tbl_affiliates SET total_earned = total_earned + ? WHERE id = ?`,
+            [commission, affiliate.id]
+          );
+
+          await conn.query(
+            `INSERT INTO tbl_affiliate_commissions (affiliate_id, user_id, deposit_id, commission_amount)
+            VALUES (?, ?, ?, ?)`,
+            [affiliate.id, user_id, depositId, commission]
+          );
+
+          await conn.query(
+            `UPDATE tbl_users SET first_deposit = 1 WHERE id = ?`,
+            [user_id]
+          );
+        }
+      }
+
+      await conn.query("COMMIT");
+      return { success: true, depositId };
+    } catch (err) {
+      await conn.query("ROLLBACK");
+      throw err;
+    } finally {
+      conn.release();
+    }
   }
 
   // In models/user/deposit.js

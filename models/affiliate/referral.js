@@ -89,6 +89,7 @@ export const Referral = {
     return rows;
   },
 
+  
   // ================= CREDIT COMMISSION IF FIRST DEPOSIT =================
   async creditCommission(userId) {
     // 1️⃣ Get user info + coupon_code

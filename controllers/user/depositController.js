@@ -1,6 +1,5 @@
 import axios from "axios";
 import Deposit from "../../models/user/deposit.js";
-import { Referral } from "../../models/affiliate/referral.js";
 import db from "../../config/db.js";
 
 // ================== 1️⃣ Initialize Deposit ==================
@@ -57,19 +56,8 @@ export const verifyPayment = async (req, res) => {
   try {
     const { reference, user_id } = req.body;
 
-    if (!reference || !user_id)
+    if (!reference || !user_id) {
       return res.status(400).json({ message: "Reference and user_id are required" });
-
-    // 🧩 Check existing deposit
-    const existingDeposit = await Deposit.getByReference(reference);
-
-    // ✅ If it already succeeded, stop
-    if (existingDeposit && existingDeposit.status === "success") {
-      return res.status(200).json({
-        status: "success",
-        message: "Payment already verified",
-        data: { amount: existingDeposit.amount },
-      });
     }
 
     // ✅ Verify with Paystack
@@ -83,32 +71,31 @@ export const verifyPayment = async (req, res) => {
     );
 
     const verification = verifyResponse.data.data;
+
     if (verification.status !== "success") {
-      if (existingDeposit) await Deposit.updateStatus(reference, "failed");
+      // mark existing deposit as failed if exists
+      await Deposit.updateStatus(reference, "failed");
       return res.status(400).json({ status: "failed" });
     }
 
     const amount = verification.amount / 100;
 
-    // 💾 If deposit doesn’t exist, create it
-    let depositId;
-    if (!existingDeposit) {
-      depositId = await Deposit.addDeposit(user_id, amount, reference, "success");
-    } else {
-      depositId = existingDeposit.id;
-      await Deposit.updateStatus(reference, "success");
+    // 💾 Credit deposit, user balance, and affiliate commission in a single transaction
+    const processResult = await Deposit.processDepositWithCommission(user_id, reference, amount);
+
+    if (processResult.alreadyProcessed) {
+      return res.status(200).json({
+        status: "success",
+        message: "Payment already processed",
+        data: { amount },
+      });
     }
-
-    // 💰 Credit user balance safely
-    await Deposit.creditUserOnce(user_id, reference, amount);
-
-    // 🏆 Check and credit affiliate commission for first deposit
-    await Referral.creditCommission(user_id); // handles first deposit & 15% commission
 
     return res.status(200).json({
       status: "success",
       data: { amount },
     });
+
   } catch (error) {
     console.error("Error verifying payment:", error.response?.data || error.message);
     return res.status(500).json({
