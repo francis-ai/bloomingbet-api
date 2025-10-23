@@ -1,5 +1,6 @@
 import db from '../../config/db.js';
 import Deposit from '../user/deposit.js'; 
+import { subDays, format, startOfYear, addMonths, addYears } from "date-fns";
 
 export const Referral = {
   // ========= Get Dashboard Stats ==================
@@ -64,6 +65,126 @@ export const Referral = {
       throw error;
     }
   },
+  
+  // ========= 2️⃣ Get Chart Data (Commissions + Clicks) ==================
+  async getChartData(affiliateId, range = "daily") {
+  try {
+    let commissionQuery = "";
+    let clickQuery = "";
+
+    if (range === "monthly") {
+      commissionQuery = `
+        SELECT DATE_FORMAT(created_at, '%Y-%m') AS label, SUM(commission_amount) AS commission
+        FROM tbl_affiliate_commissions
+        WHERE affiliate_id = ?
+        GROUP BY DATE_FORMAT(created_at, '%Y-%m')
+      `;
+      clickQuery = `
+        SELECT DATE_FORMAT(created_at, '%Y-%m') AS label, COUNT(*) AS clicks
+        FROM tbl_referral_clicks
+        WHERE affiliate_id = ?
+        GROUP BY DATE_FORMAT(created_at, '%Y-%m')
+      `;
+    } else if (range === "yearly") {
+      commissionQuery = `
+        SELECT YEAR(created_at) AS label, SUM(commission_amount) AS commission
+        FROM tbl_affiliate_commissions
+        WHERE affiliate_id = ?
+        GROUP BY YEAR(created_at)
+      `;
+      clickQuery = `
+        SELECT YEAR(created_at) AS label, COUNT(*) AS clicks
+        FROM tbl_referral_clicks
+        WHERE affiliate_id = ?
+        GROUP BY YEAR(created_at)
+      `;
+    } else {
+      // DAILY
+      commissionQuery = `
+        SELECT DATE(created_at) AS label, SUM(commission_amount) AS commission
+        FROM tbl_affiliate_commissions
+        WHERE affiliate_id = ?
+        GROUP BY DATE(created_at)
+      `;
+      clickQuery = `
+        SELECT DATE(created_at) AS label, COUNT(*) AS clicks
+        FROM tbl_referral_clicks
+        WHERE affiliate_id = ?
+        GROUP BY DATE(created_at)
+      `;
+    }
+
+    const [commissions] = await db.query(commissionQuery, [affiliateId]);
+    const [clicks] = await db.query(clickQuery, [affiliateId]);
+
+    const map = new Map();
+
+    commissions.forEach((c) => {
+      const key =
+        range === "yearly"
+          ? String(c.label)
+          : range === "monthly"
+          ? format(new Date(c.label + "-01"), "yyyy-MM")
+          : format(new Date(c.label), "yyyy-MM-dd");
+      map.set(key, {
+        label: key,
+        commission: Number(c.commission) || 0,
+        clicks: 0,
+      });
+    });
+
+    clicks.forEach((c) => {
+      const key =
+        range === "yearly"
+          ? String(c.label)
+          : range === "monthly"
+          ? format(new Date(c.label + "-01"), "yyyy-MM")
+          : format(new Date(c.label), "yyyy-MM-dd");
+      if (map.has(key)) map.get(key).clicks = Number(c.clicks) || 0;
+      else
+        map.set(key, {
+          label: key,
+          commission: 0,
+          clicks: Number(c.clicks) || 0,
+        });
+    });
+
+    // === Fill missing periods ===
+    const now = new Date();
+
+    if (range === "daily") {
+      for (let i = 6; i >= 0; i--) {
+        const key = format(subDays(now, i), "yyyy-MM-dd");
+        if (!map.has(key))
+          map.set(key, { label: key, commission: 0, clicks: 0 });
+      }
+    } else if (range === "monthly") {
+      const start = startOfYear(now);
+      for (let i = 0; i < 12; i++) {
+        const key = format(addMonths(start, i), "yyyy-MM");
+        if (!map.has(key))
+          map.set(key, { label: key, commission: 0, clicks: 0 });
+      }
+    } else if (range === "yearly") {
+      const currentYear = now.getFullYear();
+      const startYear = currentYear - 3; // 🧠 Last 3 years + current year
+      for (let y = startYear; y <= currentYear; y++) {
+        const key = String(y);
+        if (!map.has(key))
+          map.set(key, { label: key, commission: 0, clicks: 0 });
+      }
+    }
+
+    const data = [...map.values()].sort(
+      (a, b) => new Date(a.label) - new Date(b.label)
+    );
+
+    return data;
+  } catch (error) {
+    console.error("getChartData Error:", error);
+    throw error;
+  }
+},
 
   // ================= GET ALL REFERRED USERS =================
   async getReferredUsers(affiliateId) {
@@ -88,7 +209,6 @@ export const Referral = {
 
     return rows;
   },
-
   
   // ================= CREDIT COMMISSION IF FIRST DEPOSIT =================
   async creditCommission(userId) {
@@ -172,3 +292,25 @@ export const Referral = {
     }
   },
 };
+
+// === Helper: Fill Current Week ===
+function fillCurrentWeek(data) {
+  const now = new Date();
+  const monday = new Date(now);
+  monday.setDate(now.getDate() - ((now.getDay() + 6) % 7)); // Monday of this week
+  const map = new Map(data.map((d) => [new Date(d.label).toDateString(), d]));
+
+  return Array.from({ length: 7 }, (_, i) => {
+    const date = new Date(monday);
+    date.setDate(monday.getDate() + i);
+    const key = date.toDateString();
+    const existing = map.get(key);
+    return {
+      label: `${date.toLocaleDateString("en-US", {
+        weekday: "short",
+      })} [${date.toLocaleDateString("en-GB")}]`,
+      clicks: existing?.clicks || 0,
+      commission: existing?.commission || 0,
+    };
+  });
+}

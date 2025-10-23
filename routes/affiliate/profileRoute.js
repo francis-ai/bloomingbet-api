@@ -6,6 +6,7 @@ import {
    getReferralLink,
    getReferredUsers,
    getDashboardStats,
+   getAffiliateChartData
 } from '../../controllers/affiliate/profileController.js';
 
 const router = express.Router();
@@ -15,6 +16,10 @@ router.get("/referral-link", protectRoute, getReferralLink);
 
 router.get('/referred-users', protectRoute, getReferredUsers);
 router.get('/dashboard-stats', protectRoute, getDashboardStats);
+
+router.get("/chart", protectRoute, getAffiliateChartData);
+
+
 
 
 export default router;

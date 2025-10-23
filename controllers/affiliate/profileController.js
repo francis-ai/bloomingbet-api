@@ -70,7 +70,7 @@ export const getReferredUsers = async (req, res) => {
 
 export const getDashboardStats = async (req, res) => {
   try {
-    const affiliateId = req.user.id; // ✅ from token/session
+    const affiliateId = req.user.id; 
     const dashboardData = await Referral.getDashboardStats(affiliateId);
     res.json({ success: true, data: dashboardData });
   } catch (error) {
@@ -100,3 +100,19 @@ export const handleReferralVisit = async (req, res) => {
   }
 };
 
+export const getAffiliateChartData = async (req, res) => {
+  const affiliateId = req.user.id;
+  const { range = "daily" } = req.query;
+
+  try {
+    const data = await Referral.getChartData(affiliateId, range);
+    res.json({
+      success: true,
+      message: "Chart data fetched successfully",
+      data,
+    });
+  } catch (error) {
+    console.error("getAffiliateChartData Error:", error);
+    res.status(500).json({ success: false, message: "Server error" });
+  }
+};
