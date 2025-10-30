@@ -31,24 +31,24 @@ app.use(
       "http://localhost:3000", // development frontend
       "https://yourfrontenddomain.com", // production
     ],
-    methods: ["GET", "POST", "PUT", "DELETE"],
+    methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTION"],
     allowedHeaders: ["Content-Type", "Authorization"],
-    credentials: true, // allow sending cookies across origins
+    credentials: true, 
   })
 );
 
 // =================== SESSION CONFIG ===================
-app.set("trust proxy", 1); // if you're behind HTTPS/reverse proxy
+app.set("trust proxy", 1);
 app.use(
   session({
     secret: process.env.SESSION_SECRET || "super-secret-key",
     resave: false,
     saveUninitialized: false,
     cookie: {
-      httpOnly: true, // block JS access to cookies
-      secure: process.env.NODE_ENV === "production", // true only over HTTPS
-      sameSite: "None", // required for cross-domain cookies
-      maxAge: 1000 * 60 * 60 * 24 * 7, // 7 days
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production", 
+      sameSite: "None", 
+      maxAge: 1000 * 60 * 60 * 24 * 7,
     },
   })
 );
